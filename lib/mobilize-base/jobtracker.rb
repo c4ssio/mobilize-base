@@ -17,7 +17,6 @@ module Mobilize
     end
 
     def Jobtracker.kill_workers(count=nil)
-      Jobtracker.stop!
       Resque.kill_workers(count)
     end
 
@@ -83,24 +82,19 @@ module Mobilize
                   server_strings = server_line.split(",")[1..-1].reject{|t| t.strip.starts_with?(":")}
                   server_strings.map{|ss| ss.gsub("'","").gsub('"','').strip}
                 rescue
-                  # for dev/test
                   ["127.0.0.1"]
                 end
       servers
     end
 
     def Jobtracker.current_server
-      server = case Base.env
-        when "production", "staging"
-          begin
-            Socket.gethostbyname(Socket.gethostname).first
-          rescue
-            nil
-          end
-        else
-          "127.0.0.1"
+      #try to use configured name first
+      begin;return Mobilize::Base.config('jobtracker')['server_name'];rescue;end
+      begin
+        Socket.gethostbyname(Socket.gethostname).first
+      rescue
+        nil
       end
-      server
     end
 
     def Jobtracker.perform(id,*args)
