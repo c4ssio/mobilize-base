@@ -100,9 +100,7 @@ namespace :mobilize do
     resque_web_extension_path = "#{full_config_dir}resque_web.rb"
     #kill any resque-web for now
     `ps aux | grep resque-web | awk '{print $2}' | xargs kill`
-    resque_redis_port_args = if Mobilize::Base.env == 'test'
-                               " -r localhost:#{Mobilize::Base.config('resque')['redis_port']}"
-                             end.to_s
+    resque_redis_port_args = "#{Mobilize::Base.config('resque')['redis_host']}:#{Mobilize::Base.config('resque')['redis_port']}"
     #determine view folder and override queues and working erbs
     require 'resque/server'
     view_dir = ::Resque::Server.views + "/"
@@ -116,7 +114,7 @@ namespace :mobilize do
     FileUtils.copy(new_queues_erb_path,old_queues_erb_path)
     FileUtils.copy(new_working_erb_path,old_working_erb_path)
     sleep 5 #give them time to die
-    command = "bundle exec resque-web -p #{port.to_s} #{resque_web_extension_path} #{resque_redis_port_args}"
+    command = "bundle exec resque-web -r #{resque_redis_port_args} #{resque_web_extension_path}"
     `#{command}`
   end
   desc "create indexes for all base models in mongodb"
