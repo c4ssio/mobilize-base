@@ -97,34 +97,36 @@ module Mobilize
       end
     end
 
-    def Jobtracker.perform(id,*args)
+    def Jobtracker.perform( _id,*_args )
       while Jobtracker.status != 'stopping'
-        users = User.all
+        _users = User.all
         Jobtracker.run_notifications
         #run throush all users randomly
         #so none are privileged on JT restarts
-        users.sort_by{rand}.each do |u|
-          r = u.runner
-          Jobtracker.update_status("Checking #{r.path}") if r.is_on_server?
+        _users.sort_by{rand}.each do |_user|
+          _runner                   = _user.runner
+          Jobtracker.update_status( "Checking #{ _runner.path}" ) if _runner.is_on_server?
           #check for run_now file
-          run_now_dir = "/home/#{u.name}/mobilize/"
-          run_now_path = "#{run_now_dir}run_now"
-          run_now = if `sudo ls #{run_now_dir}`.split("\n").include?("run_now")
-                      #delete user's run now file
-                      `sudo rm -rf #{run_now_path}`
-                      true
-                    else
-                      false
-                    end
-          r.force_due if run_now
-          if r.is_due?
-            r.enqueue!
-            Jobtracker.update_status("Enqueued #{r.path}")
+          _run_now_dir              = "/home/#{ _user.name }/mobilize/"
+          _run_now_path             = "#{ _run_now_dir }run_now"
+          if File.exists? _run_now_dir
+            if `sudo ls #{ _run_now_dir }`.split("\n").include? "run_now"
+              #delete user's run now file
+              `sudo rm -rf #{ _run_now_path }`
+              _run_now = true
+            else
+              false
+            end
+            _runner.force_due if _run_now
+          end
+          if _runner.is_due?
+            _runner.enqueue!
+            Jobtracker.update_status "Enqueued #{ _runner.path }"
           end
         end
         sleep 5
       end
-      Jobtracker.update_status("told to stop")
+      Jobtracker.update_status "told to stop"
       return true
     end
   end
