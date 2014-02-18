@@ -45,7 +45,7 @@ module TestHelper
 
       if _jobs_unexpected_working.length>0
         _jobs_unexpected_description   = _jobs_unexpected_working.map{|_job| _job['path']}.join(";")
-        _error_msg                    += ( _state + ": " + _jobs_unexpected_description + "\n" )
+        _error_msg                    += ( "working: " + _jobs_unexpected_description + "\n" )
       end
 
       _jobs_unexpected_failed       = _jobs_failed.reject{|_job_failed|
@@ -57,7 +57,7 @@ module TestHelper
       if _jobs_unexpected_failed.length>0
         _jobs_unexpected_description   = _jobs_unexpected_failed.
                                          map{|_job_unexpected_failed| _job_unexpected_failed['path']}.join(";")
-        _error_msg                    += ( _state + ": " + _jobs_unexpected_description + "\n" )
+        _error_msg                    += ( "failed: " + _jobs_unexpected_description + "\n" )
       end
 
 
