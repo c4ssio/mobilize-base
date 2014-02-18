@@ -82,7 +82,9 @@ module TestHelper
                "total #{ _job_expected['confirmed_ats'].length.to_s } of #{ _job_expected['count'] }"
         end
         _workers_working     = Mobilize::Resque.workers('working').
-                               select{|_worker| _worker.job['payload']['class'] != 'Mobilize::Jobtracker'}
+                               select{|_worker| _worker.job and
+                                       _worker.job['payload'] and
+                                       _worker.job['payload']['class'] != 'Mobilize::Jobtracker'}
       end
 
       #figure out who's still pending
