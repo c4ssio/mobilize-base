@@ -9,55 +9,87 @@ ENV['MOBILIZE_ENV'] = 'test'
 require 'mobilize-base'
 $TESTING = true
 module TestHelper
-  def TestHelper.confirm_expected_jobs(expected_fixture_name,time_limit=600)
+  def TestHelper.jobs_at_state( _state )
+    if    _state == 'working'
+      Mobilize::Resque.workers('working').map{|_worker| _worker.job}.
+      select{|_job| _job and _job['payload'] and _job['payload']['args']}
+    elsif _state == 'failed'
+      Mobilize::Resque.failures.
+      select{|_job| _job and _job['payload'] and _job['payload']['args']}
+    end.map do |_job|
+      { 'path' => _job['payload']['args'].first }
+    end
+  end
+  def TestHelper.confirm_expected_jobs(_expected_fixture_name, _time_limit = 600)
     #clear all failures
     ::Resque::Failure.clear
-    jobs = {}
-    jobs['expected'] = TestHelper.load_fixture(expected_fixture_name)
-    jobs['pending'] = jobs['expected'].select{|j| j['confirmed_ats'].length < j['count']}
-    start_time = Time.now.utc
-    total_time = 0
-    while (jobs['pending'].length>0 or #while there are pending jobs
-           #or there are workers working (don't count jobtracker)
-           Mobilize::Resque.workers('working').select{|w| w.job['payload']['class']!='Mobilize::Jobtracker'}.length>0) and
-           total_time < time_limit #time limit not yet expired
-      #working jobs are running on the queue at this instant
-      jobs['working'] = Mobilize::Resque.workers('working').map{|w| w.job}.select{|j| j and j['payload'] and j['payload']['args']}
-      #failed jobs are in the failure queue
-      jobs['failed'] = Mobilize::Resque.failures.select{|j| j and j['payload'] and j['payload']['args']}
+    _jobs_expected        = TestHelper.load_fixture _expected_fixture_name, {'owner' => TestHelper.owner_user.name }
+    _jobs_pending         = _jobs_expected.select{|_job| _job['confirmed_ats'].length < _job['count']}
+    _start_time           = Time.now.utc
+    _total_time           = 0
+    _workers_working      = []
+    while ( _jobs_pending.length > 0 or _workers_working.length > 0) and
+            _total_time < _time_limit
 
-      #unexpected jobs are not supposed to be run in this test, includes leftover failures
-      jobs['unexpected'] = {}
-      error_msg = ""
-      ['working','failed'].each do |state|
-        jobs['unexpected'][state] = jobs[state].reject{|j|
-                                      jobs['expected'].select{|ej|
-                                        ej['state']==state and j['payload']['args'].first == ej['path']}.first}
-        if jobs['unexpected'][state].length>0
-          error_msg += state + ": " + jobs['unexpected'][state].map{|j| j['payload']['args'].first}.join(";") + "\n"
-        end
+      _jobs_working                 = TestHelper.jobs_at_state 'working'
+
+      _jobs_failed                  = TestHelper.jobs_at_state 'failed'
+
+      _error_msg                    = ""
+
+      _jobs_unexpected_working      = _jobs_working.reject{|_job_working|
+                                      _jobs_expected.select{|_job_expected|
+                                      _job_expected['state']                 == 'working' and
+                                      _job_working['path'] == _job_expected['path']}.first
+                                      }
+
+      if _jobs_unexpected_working.length>0
+        _jobs_unexpected_description   = _jobs_unexpected_working.map{|_job| _job['path']}.join(";")
+        _error_msg                    += ( _state + ": " + _jobs_unexpected_description + "\n" )
       end
+
+      _jobs_unexpected_failed       = _jobs_failed.reject{|_job_failed|
+                                      _jobs_expected.select{|_job_expected|
+                                      _job_expected['state']                 == 'failed' and
+                                      _job_failed['path']                    == _job_expected['path']}.first
+                                    }
+
+      if _jobs_unexpected_failed.length>0
+        _jobs_unexpected_description   = _jobs_unexpected_failed.
+                                         map{|_job_unexpected_failed| _job_unexpected_failed['path']}.join(";")
+        _error_msg                    += ( _state + ": " + _jobs_unexpected_description + "\n" )
+      end
+
+
       #clear out unexpected paths or there will be failure
-      if error_msg.length>0
-        raise "Found unexpected results:\n" + error_msg
+      if _error_msg.length>0
+        raise "Found unexpected results:\n" + _error_msg
       end
 
       #now make sure pending jobs get done
-      jobs['expected'].each do |j|
-        start_confirmed_ats = j['confirmed_ats']
-        resque_timestamps = jobs[j['state']].select{|sj| sj['payload']['args'].first == j['path']}.map{|sj| sj['run_at'] || sj['failed_at']}
-        new_timestamps = (resque_timestamps - start_confirmed_ats).uniq
-        if new_timestamps.length>0 and j['confirmed_ats'].length < j['count']
-          j['confirmed_ats'] += new_timestamps
-          puts "#{Time.now.utc.to_s}: #{new_timestamps.length.to_s} #{j['state']} added to #{j['path']}; total #{j['confirmed_ats'].length.to_s} of #{j['count']}"
+      _jobs_expected.each do |_job_expected|
+        _start_confirmed_ats              = _job_expected['confirmed_ats']
+        _jobs_at_state                    = ( _job_expected['state'] == 'working' ? _jobs_working : _jobs_failed )
+
+        _resque_timestamps                = _jobs_at_state.
+                                            select{|_job_at_state| _job_at_state['path']   == _job_expected['path'] }.
+                                               map{|_job_at_state| _job_at_state['run_at'] || _job_at_state['failed_at'] }
+        _new_timestamps                   = (_resque_timestamps - _start_confirmed_ats).uniq
+        if _new_timestamps.length>0 and _job_expected['confirmed_ats'].length < _job_expected['count']
+          _job_expected['confirmed_ats'] += _new_timestamps
+          puts "#{ Time.now.utc.to_s }: #{ _new_timestamps.length.to_s } " +
+               "#{ _job_expected['state'] } added to #{ _job_expected['path'] }; " +
+               "total #{ _job_expected['confirmed_ats'].length.to_s } of #{ _job_expected['count'] }"
         end
+        _workers_working     = Mobilize::Resque.workers('working').
+                               select{|_worker| _worker.job['payload']['class'] != 'Mobilize::Jobtracker'}
       end
 
       #figure out who's still pending
-      jobs['pending'] = jobs['expected'].select{|j| j['confirmed_ats'].length < j['count']}
+      _jobs_pending = _jobs_expected.select{|_job_expected| _job_expected['confirmed_ats'].length < _job_expected['count']}
       sleep 1
-      total_time = Time.now.utc - start_time
-      puts "#{total_time.to_s} seconds elapsed" if total_time.to_s.ends_with?("0")
+      _total_time = Time.now.utc - _start_time
+      puts "#{ _total_time.to_s } seconds elapsed" if _total_time.to_s.ends_with? "0"
     end
   end
 
@@ -115,17 +147,28 @@ module TestHelper
     return Mobilize::User.find_or_create_by_name(user_name)
   end
 
-  def TestHelper.load_fixture(name)
+  def TestHelper.load_fixture( _name, _sub_hash = nil)
     #assume yml, check
-    yml_file_path = "#{Mobilize::Base.root}/test/fixtures/#{name}.yml"
-    standard_file_path = "#{Mobilize::Base.root}/test/fixtures/#{name}"
-    if File.exists?(yml_file_path)
-      YAML.load_file(yml_file_path)
-    elsif File.exists?(standard_file_path)
-      File.read(standard_file_path)
-    else
-      raise "Could not find #{standard_file_path}"
+    _yml_file_path = "#{Mobilize::Base.root}/test/fixtures/#{ _name }.yml"
+    _standard_file_path = "#{Mobilize::Base.root}/test/fixtures/#{ _name }"
+    _hashes = if File.exists? _yml_file_path
+                YAML.load_file _yml_file_path
+              elsif File.exists? _standard_file_path
+                File.read _standard_file_path
+              else
+                raise "Could not find #{ _standard_file_path }"
+              end
+    if _sub_hash
+      _hashes.each do |_hash|
+        _hash.each do |_key, _value|
+          next unless _value.class == String
+          _sub_hash.each do |_sub_key, _sub_value |
+            _hash[ _key ] = ( _value.gsub "@#{ _sub_key }", _sub_value )
+          end
+        end
+      end
     end
+    _hashes
   end
 
   def TestHelper.write_fixture(fixture_name, target_url, options={})
