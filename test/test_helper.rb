@@ -171,9 +171,9 @@ module TestHelper
     _hashes
   end
 
-  def TestHelper.write_fixture(fixture_name, target_url, options={})
+  def TestHelper.write_fixture(fixture_name, target_url, options={}, _sub_hash = nil)
     u = TestHelper.owner_user
-    fixture_raw = TestHelper.load_fixture(fixture_name)
+    fixture_raw = TestHelper.load_fixture(fixture_name, _sub_hash)
     if options['replace']
       fixture_data = if fixture_raw.class == Array
                      fixture_raw.hash_array_to_tsv
