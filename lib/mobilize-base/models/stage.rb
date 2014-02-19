@@ -138,17 +138,17 @@ module Mobilize
       stage_name = "#{j.name}_stage#{s.idx.to_s}.err"
       target_path =  (r.path.split("/")[0..-2] + [stage_name]).join("/")
       status_msg = "Failed at #{Time.now.utc.to_s}"
+      err_txt = if response['err_url']
+                  Dataset.read_by_url(response['err_url'],u.name)
+                elsif response['err_str']
+                  response['err_str']
+                end
+      err_txt = ["response","\n",err_txt].join
       unless ENV['MOBILIZE_ENV'] == 'production'
         #read err txt, add err sheet, write to it
         err_sheet = Gsheet.find_by_path(target_path,gdrive_slot)
         err_sheet.delete if err_sheet
         err_sheet = Gsheet.find_or_create_by_path(target_path,gdrive_slot)
-        err_txt = if response['err_url']
-                    Dataset.read_by_url(response['err_url'],u.name)
-                  elsif response['err_str']
-                    response['err_str']
-                  end
-        err_txt = ["response","\n",err_txt].join
         err_sheet.write(err_txt,u.name)
       end
       #exception will be first row below "response" header
