@@ -87,8 +87,8 @@ module Mobilize
       end
 
       #once
-      if j.trigger.strip.downcase=='once'
-        #active and once means due
+      if ['once', 'always'].include? j.trigger.strip.downcase
+        #active and once/always means due
         return true
       end
 
