@@ -107,9 +107,10 @@ module Mobilize
           _runner                   = _user.runner
           Jobtracker.update_status( "Checking #{ _runner.path}" ) if _runner.is_on_server?
           #check for run_now file
-          _run_now_dir              = "/home/#{ _user.name }/mobilize/"
+          _user_dir                 = "/home/#{ _user.name }/"
+          _run_now_dir              = "#{ _user_dir }mobilize/"
           _run_now_path             = "#{ _run_now_dir }run_now"
-          if File.exists? _run_now_dir
+          if File.exists? _user_dir
             if `sudo ls #{ _run_now_dir }`.split("\n").include? "run_now"
               #delete user's run now file
               `sudo rm -rf #{ _run_now_path }`
